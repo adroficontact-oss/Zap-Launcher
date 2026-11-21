@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11151d">
+  <title>Block Breaker</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Segoe UI", sans-serif; background: #11151d; color: #f2f4f8; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 20px; background: radial-gradient(ellipse at 50% 0,#22395b 0,transparent 50%),#11151d; }
+    main { width: min(760px,100%); }
+    header { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    h1 { margin: 0; font-size: clamp(22px,5vw,36px); letter-spacing: 0; }
+    .score { color: #b9c9df; font-size: 14px; }
+    canvas { width: 100%; height: auto; aspect-ratio: 760 / 480; border: 1px solid #44536c; border-radius: 8px; display: block; background: #101827; box-shadow: 0 18px 60px #0008; touch-action: none; }
+    .controls { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 14px; color: #aeb8c9; font-size: 13px; }
+    button { border: 1px solid #4d617e; border-radius: 4px; padding: 8px 12px; color: white; background: #243650; cursor: pointer; }
+    button:hover { background: #314a6b; }
+    kbd { border: 1px solid #53627a; border-radius: 3px; padding: 2px 5px; font: inherit; }
+  </style>
+</head>
+<body>
+  <main>
+    <header><h1>Block Breaker</h1><div class="score">Score: <strong id="score">0</strong></div></header>
+    <canvas id="game" width="760" height="480" aria-label="Block Breaker game"></canvas>
+    <div class="controls"><span>Move with <kbd>←</kbd> <kbd>→</kbd> or your mouse. Tap to launch.</span><button id="restart" type="button">Restart</button></div>
+  </main>
+  <script>
+    (() => {
+      const canvas = document.querySelector("#game");
+      const context = canvas.getContext("2d");
+      const scoreElement = document.querySelector("#score");
+      const paddle = { x: 325, y: 440, width: 110, height: 12, speed: 7 };
+      const ball = { x: 380, y: 410, radius: 8, dx: 3.2, dy: -3.8, moving: false };
+      const keys = new Set();
+      const bricks = [];
+      const colors = ["#36c1e8", "#37a9d2", "#6389e8", "#9672e7", "#e57cbd"];
+      let score = 0;
+      let running = true;
+      let message = "Click or tap to launch";
+
+      function reset() {
+        score = 0;
+        running = true;
+        message = "Click or tap to launch";
+        paddle.x = (canvas.width - paddle.width) / 2;
+        ball.x = canvas.width / 2;
+        ball.y = paddle.y - 20;
+        ball.dx = 3.2;
+        ball.dy = -3.8;
+        ball.moving = false;
+        bricks.length = 0;
+        for (let row = 0; row < 5; row++) {
+          for (let column = 0; column < 10; column++) {
+            bricks.push({ x: 40 + column * 69, y: 48 + row * 28, width: 61, height: 18, color: colors[row], alive: true });
+          }
+        }
+        scoreElement.textContent = "0";
+        draw();
+      }
+
+      function draw() {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = "#101827";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.strokeStyle = "#ffffff0d";
+        for (let x = 0; x < canvas.width; x += 38) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, canvas.height); context.stroke(); }
+        for (const brick of bricks) {
+          if (!brick.alive) continue;
+          context.fillStyle = brick.color;
+          context.beginPath();
+          context.roundRect(brick.x, brick.y, brick.width, brick.height, 4);
+          context.fill();
+        }
+        context.fillStyle = "#f4f7ff";
+        context.beginPath();
+        context.roundRect(paddle.x, paddle.y, paddle.width, paddle.height, 6);
+        context.fill();
+        context.fillStyle = "#fff";
+        context.beginPath();
+        context.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        context.fill();
+        if (message) {
+          context.fillStyle = "#dce7f6";
+          context.font = "600 18px Segoe UI, sans-serif";
+          context.textAlign = "center";
+          context.fillText(message, canvas.width / 2, canvas.height / 2 + 20);
+        }
+      }
+
+      function frame() {
+        if (keys.has("ArrowLeft")) paddle.x -= paddle.speed;
+        if (keys.has("ArrowRight")) paddle.x += paddle.speed;
+        paddle.x = Math.max(0, Math.min(canvas.width - paddle.width, paddle.x));
+        if (!ball.moving) {
+          ball.x = paddle.x + paddle.width / 2;
+          ball.y = paddle.y - 14;
+        } else if (running) {
+          ball.x += ball.dx;
+          ball.y += ball.dy;
+          if (ball.x < ball.radius || ball.x > canvas.width - ball.radius) ball.dx *= -1;
+          if (ball.y < ball.radius) ball.dy *= -1;
+          if (ball.dy > 0 && ball.y + ball.radius >= paddle.y && ball.x >= paddle.x && ball.x <= paddle.x + paddle.width) {
+            ball.dy = -Math.abs(ball.dy);
+            ball.dx = ((ball.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2)) * 4.5;
+          }
+          if (ball.y > canvas.height) { running = false; message = "Game over - press Restart"; }
+          const hit = bricks.find(brick => brick.alive && ball.x > brick.x && ball.x < brick.x + brick.width && ball.y - ball.radius < brick.y + brick.height && ball.y + ball.radius > brick.y);
+          if (hit) {
+            hit.alive = false;
+            ball.dy *= -1;
+            score += 10;
+            scoreElement.textContent = String(score);
+            if (bricks.every(brick => !brick.alive)) { running = false; message = "You cleared the board!"; }
+          }
+        }
+        draw();
+        requestAnimationFrame(frame);
+      }
+
+      function startBall() { if (!ball.moving && running) { ball.moving = true; message = ""; } }
+      document.addEventListener("keydown", event => { if (["ArrowLeft", "ArrowRight", " "].includes(event.key)) event.preventDefault(); keys.add(event.key); if (event.key === " ") startBall(); });
+      document.addEventListener("keyup", event => keys.delete(event.key));
+      canvas.addEventListener("pointermove", event => {
+        const bounds = canvas.getBoundingClientRect();
+        paddle.x = ((event.clientX - bounds.left) / bounds.width) * canvas.width - paddle.width / 2;
+      });
+      canvas.addEventListener("pointerdown", startBall);
+      document.querySelector("#restart").addEventListener("click", reset);
+      reset();
+      requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
